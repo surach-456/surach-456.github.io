@@ -1,140 +1,287 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
-  <title>Alarm Map (Auto)</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob;">
+<title>Alarm Map (Auto)</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <style>
-    :root {
-      --ac:#ff9800;
-      --nodeb:#e53935;
-      --ipran:#b71c1c;
-    }
+<style>
+:root{
+  --ac:#ff9800;
+  --nodeb:#e53935;
+  --ipran:#b71c1c;
+}
 
-    html,body,#map { width:100%; height:100%; margin:0 }
+html,body,#map{margin:0;width:100%;height:100%}
 
-    /* Icons */
-    .alarm-icon {
-      font-size:26px;
-      line-height:1;
-      text-shadow:1px 1px 2px rgba(0,0,0,.3);
-    }
-    .alarm-icon.ac { color:var(--ac) }
-    .alarm-icon.nodeb { color:var(--nodeb) }
-    .alarm-icon.ipran { color:var(--ipran); font-size:13px }
+/* ===== icons ===== */
+.alarm-icon{
+  font-size:26px;
+  line-height:1;
+  text-shadow:1px 1px 2px rgba(0,0,0,.3);
+}
+.ac{color:var(--ac)}
+.nodeb{color:var(--nodeb)}
+.ipran{color:var(--ipran)}
 
-    /* Labels */
-    .site-label {
-      font:700 11px Segoe UI, sans-serif;
-      white-space:nowrap;
-      text-shadow:-1px -1px #fff,1px 1px #fff;
-      pointer-events:none;
-    }
-    body.show-labels .label-container { display:block }
-    .label-container { display:none }
+/* ===== labels ===== */
+.site-label{
+  font:700 11px Segoe UI,sans-serif;
+  white-space:nowrap;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000;
+  pointer-events:none;
+}
+.label-container{display:none}
+body.show-labels .label-container{display:block}
 
-    /* Tooltip */
-    .tooltip-site { font:12px Segoe UI,sans-serif; max-width:350px }
-    .tooltip-site table { border-collapse:collapse; width:100% }
-    .tooltip-site td { padding:3px 5px; border-bottom:1px solid #eee }
-    .tooltip-site td.k { font-weight:bold; color:#555; width:40% }
-  </style>
+/* ===== info panel ===== */
+#info-panel{
+  position:absolute;
+  top:0;
+  right:0;
+  width:320px;
+  height:100%;
+  background:#fff;
+  box-shadow:-2px 0 6px rgba(0,0,0,.3);
+  z-index:1200;
+  font:13px Segoe UI,sans-serif;
+  overflow:auto;
+}
+#info-panel.hidden{display:none}
+
+.panel-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px;
+  background:#f5f5f5;
+  border-bottom:1px solid #ddd;
+  font-weight:700;
+}
+#panel-close{
+  border:none;
+  background:none;
+  cursor:pointer;
+  font-size:16px;
+}
+#panel-body{padding:10px}
+
+/* ===== table (reuse tooltip style) ===== */
+.tooltip-site{
+  font:12px Segoe UI,sans-serif;
+}
+.tooltip-site table{
+  width:100%;
+  border-collapse:collapse
+}
+.tooltip-site td{
+  padding:4px 6px;
+  border-bottom:1px solid #eee
+}
+.tooltip-site .k{
+  font-weight:bold;
+  color:#555;
+  width:40%
+}
+
+/* ===== filter ===== */
+#filter{
+  position:absolute;
+  top:10px;
+  right:10px;
+  background:#fff;
+  padding:8px 10px;
+  border-radius:6px;
+  font:13px Segoe UI,sans-serif;
+  box-shadow:0 2px 6px rgba(0,0,0,.3);
+  z-index:1000;
+}
+#filter label{
+  display:block;
+  cursor:pointer;
+  margin-bottom:4px;
+}
+#filter input{margin-right:6px}
+</style>
 </head>
 
 <body class="show-labels">
+
 <div id="map"></div>
 
+<!-- ===== right info panel ===== -->
+<div id="info-panel" class="hidden">
+  <div class="panel-header">
+    <span id="panel-title">Site Detail</span>
+    <button id="panel-close">✖</button>
+  </div>
+  <div id="panel-body"></div>
+</div>
+
+<!-- ===== filter UI ===== -->
+<div id="filter">
+  <label>
+    <input type="checkbox" checked data-alarm="AC FAIL">
+    ⚡ AC FAIL (<span id="cnt-ac">0</span>)
+  </label>
+  <label>
+    <input type="checkbox" checked data-alarm="NodeB DOWN">
+    📍 NodeB DOWN (<span id="cnt-nodeb">0</span>)
+  </label>
+  <label>
+    <input type="checkbox" checked data-alarm="IPRAN DOWN">
+    ⚠️ IPRAN DOWN (<span id="cnt-ipran">0</span>)
+  </label>
+</div>
+
 <script>
-/* ===================== Utils ===================== */
-function fmtRunXdHHMM(ms){
-  if(ms<0) ms=0;
-  const m=Math.floor(ms/60000);
-  const d=Math.floor(m/(24*60));
-  const h=Math.floor((m-d*1440)/60);
-  const mm=m%60;
-  return `${d}d ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+/* ===== utils ===== */
+const fmtRun = ms => {
+  ms = Math.max(0, ms)
+  const m = ms/60000|0
+  const d = m/1440|0
+  return `${d}d ${String(m/60%24|0).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
 }
 
-function updateRuntimes(){
-  const now=Date.now();
-  document.querySelectorAll(".js-runtime").forEach(el=>{
-    const occ=el.dataset.occ2;
-    if(!occ || isNaN(Date.parse(occ))) return;
-    el.textContent=fmtRunXdHHMM(now-new Date(occ));
-  });
+const updateRuntimes = () => {
+  const now = Date.now()
+  document.querySelectorAll('.js-runtime').forEach(el =>
+    el.textContent = fmtRun(now - Date.parse(el.dataset.occ))
+  )
 }
-setInterval(updateRuntimes,60000);
+setInterval(updateRuntimes, 60000)
 
-/* ===================== Map ===================== */
-const map=L.map("map",{center:[15.5,103.5],zoom:7});
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
-  attribution:"© OpenStreetMap"
-}).addTo(map);
+/* ===== map ===== */
+const map = L.map('map',{
+  center:[16.431958, 102.81719],
+  zoom:8,
+  zoomSnap:0.5
+})
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© OpenStreetMap'
+}).addTo(map)
 
-/* ===================== Data ===================== */
+/* ===== layers ===== */
+const layers = {
+  'AC FAIL': L.layerGroup().addTo(map),
+  'NodeB DOWN': L.layerGroup().addTo(map),
+  'IPRAN DOWN': L.layerGroup().addTo(map)
+}
+
+/* ===== data ===== */
 const alarms=[
   {
-    type:"ac",
-    lat:17.40226,lng:103.18501,
-    code:"NLNMK",
-    alarm:"AC FAIL",
-    occ:"2026-03-22T08:43:50",
-    site:"หนองลาด-หนองเม็ก",
-    district:"หนองหาน",
-    province:"อุดรธานี"
+    type:'ac',lat:17.40226,lng:103.18501,
+    code:'NLNMK',alarm:'AC FAIL',
+    occ:'2026-03-22T08:43:50',
+    site:'หนองลาด-หนองเม็ก',district:'หนองหาน',province:'อุดรธานี'
   },
   {
-    type:"ac",
-    lat:17.29927,lng:103.15061,
-    code:"MYINM",
-    alarm:"AC FAIL",
-    occ:"2026-03-22T08:00:55",
-    site:"เม็กใหญ่-หนองเม็ก",
-    district:"หนองหาน",
-    province:"อุดรธานี"
+    type:'ac',lat:17.29927,lng:103.15061,
+    code:'MYINM',alarm:'IPRAN DOWN',
+    occ:'2026-03-22T08:00:55',
+    site:'เม็กใหญ่-หนองเม็ก',district:'หนองหาน',province:'อุดรธานี'
+  },
+  {
+    type:'ac',lat:17.29927,lng:103.15061,
+    code:'MYINM',alarm:'NodeB DOWN',
+    occ:'2026-03-22T08:00:55',
+    site:'เม็กใหญ่-หนองเม็ก',district:'หนองหาน',province:'อุดรธานี'
   }
-];
+]
 
-/* ===================== Factories ===================== */
-const iconFactory=a=>L.divIcon({
-  className:"",
+/* ===== factories ===== */
+const alarmIconMap = {
+  'AC FAIL': '⚡',
+  'NodeB DOWN': '📍',
+  'IPRAN DOWN': '⚠️'
+}
+
+const iconFactory = a => L.divIcon({
+  className:'',
   iconSize:[24,24],
   iconAnchor:[12,12],
   html:`
-   <div class="alarm-icon ${a.type}">
-     ⚡
-     <div class="label-container site-label">${a.code}</div>
-   </div>`
-});
+    <div class="alarm-icon ${a.type}">
+      ${alarmIconMap[a.alarm] || '❓'}
+      <div class="label-container site-label">${a.code}</div>
+    </div>
+  `
+})
 
-const tooltipFactory=a=>`
-<div class="tooltip-site">
-<table>
-  <tr><td class='k'>Alarm</td><td>${a.alarm}</td></tr>
-  <tr><td class='k'>Occurrence</td><td>${a.occ.replace("T"," ")}</td></tr>
-  <tr><td class='k'>Runtime</td>
-      <td><span class="js-runtime" data-occ2="${a.occ}"></span></td></tr>
-  <tr><td class='k'>Site</td><td>${a.site}</td></tr>
-  <tr><td class='k'>District</td><td>${a.district}</td></tr>
-  <tr><td class='k'>Province</td><td>${a.province}</td></tr>
-</table>
-</div>`;
+const panelFactory = a => `
+  <table class="tooltip-site">
+    <tr><td class="k">Alarm</td><td>${a.alarm}</td></tr>
+    <tr><td class="k">Occurrence</td><td>${a.occ.replace('T',' ')}</td></tr>
+    <tr>
+      <td class="k">Runtime</td>
+      <td><span class="js-runtime" data-occ="${a.occ}"></span></td>
+    </tr>
+    <tr><td class="k">Site</td><td>${a.site}</td></tr>
+    <tr><td class="k">District</td><td>${a.district}</td></tr>
+    <tr><td class="k">Province</td><td>${a.province}</td></tr>
+  </table>
+`
 
-/* ===================== Render ===================== */
-alarms.forEach(a=>{
-  L.marker([a.lat,a.lng],{icon:iconFactory(a)})
-    .bindTooltip(tooltipFactory(a),{interactive:true})
-    .addTo(map);
-});
+/* ===== render + count ===== */
+const count = {
+  'AC FAIL': 0,
+  'NodeB DOWN': 0,
+  'IPRAN DOWN': 0
+}
 
-updateRuntimes();
+alarms.forEach(a => {
+  const marker = L.marker([a.lat,a.lng],{
+    icon:iconFactory(a)
+  })
+
+  marker.on('click', () => {
+    document.getElementById('info-panel').classList.remove('hidden')
+    document.getElementById('panel-title').textContent = a.code
+    document.getElementById('panel-body').innerHTML = panelFactory(a)
+    updateRuntimes()
+  })
+
+  map.on('click', () => {
+    document.getElementById('info-panel').classList.add('hidden')
+  })
+
+  if(layers[a.alarm]){
+    layers[a.alarm].addLayer(marker)
+    count[a.alarm]++
+  }
+})
+
+document.getElementById('cnt-ac').textContent     = count['AC FAIL']
+document.getElementById('cnt-nodeb').textContent = count['NodeB DOWN']
+document.getElementById('cnt-ipran').textContent = count['IPRAN DOWN']
+
+/* ===== filter logic ===== */
+document.querySelectorAll('#filter input').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const alarm = cb.dataset.alarm
+    cb.checked
+      ? map.addLayer(layers[alarm])
+      : map.removeLayer(layers[alarm])
+  })
+})
+
+document.getElementById('panel-close')
+  .addEventListener('click', () =>
+    document.getElementById('info-panel').classList.add('hidden')
+  )
+
+updateRuntimes()
 </script>
 </body>
 </html>
+``
