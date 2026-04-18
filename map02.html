@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
+  <title>Alarm Map (Auto)</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    :root {
+      --ac:#ff9800;
+      --nodeb:#e53935;
+      --ipran:#b71c1c;
+    }
+
+    html,body,#map { width:100%; height:100%; margin:0 }
+
+    /* Icons */
+    .alarm-icon {
+      font-size:26px;
+      line-height:1;
+      text-shadow:1px 1px 2px rgba(0,0,0,.3);
+    }
+    .alarm-icon.ac { color:var(--ac) }
+    .alarm-icon.nodeb { color:var(--nodeb) }
+    .alarm-icon.ipran { color:var(--ipran); font-size:13px }
+
+    /* Labels */
+    .site-label {
+      font:700 11px Segoe UI, sans-serif;
+      white-space:nowrap;
+      text-shadow:-1px -1px #fff,1px 1px #fff;
+      pointer-events:none;
+    }
+    body.show-labels .label-container { display:block }
+    .label-container { display:none }
+
+    /* Tooltip */
+    .tooltip-site { font:12px Segoe UI,sans-serif; max-width:350px }
+    .tooltip-site table { border-collapse:collapse; width:100% }
+    .tooltip-site td { padding:3px 5px; border-bottom:1px solid #eee }
+    .tooltip-site td.k { font-weight:bold; color:#555; width:40% }
+  </style>
+</head>
+
+<body class="show-labels">
+<div id="map"></div>
+
+<script>
+/* ===================== Utils ===================== */
+function fmtRunXdHHMM(ms){
+  if(ms<0) ms=0;
+  const m=Math.floor(ms/60000);
+  const d=Math.floor(m/(24*60));
+  const h=Math.floor((m-d*1440)/60);
+  const mm=m%60;
+  return `${d}d ${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+
+function updateRuntimes(){
+  const now=Date.now();
+  document.querySelectorAll(".js-runtime").forEach(el=>{
+    const occ=el.dataset.occ2;
+    if(!occ || isNaN(Date.parse(occ))) return;
+    el.textContent=fmtRunXdHHMM(now-new Date(occ));
+  });
+}
+setInterval(updateRuntimes,60000);
+
+/* ===================== Map ===================== */
+const map=L.map("map",{center:[15.5,103.5],zoom:7});
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  attribution:"© OpenStreetMap"
+}).addTo(map);
+
+/* ===================== Data ===================== */
+const alarms=[
+  {
+    type:"ac",
+    lat:17.40226,lng:103.18501,
+    code:"NLNMK",
+    alarm:"AC FAIL",
+    occ:"2026-03-22T08:43:50",
+    site:"หนองลาด-หนองเม็ก",
+    district:"หนองหาน",
+    province:"อุดรธานี"
+  },
+  {
+    type:"ac",
+    lat:17.29927,lng:103.15061,
+    code:"MYINM",
+    alarm:"AC FAIL",
+    occ:"2026-03-22T08:00:55",
+    site:"เม็กใหญ่-หนองเม็ก",
+    district:"หนองหาน",
+    province:"อุดรธานี"
+  }
+];
+
+/* ===================== Factories ===================== */
+const iconFactory=a=>L.divIcon({
+  className:"",
+  iconSize:[24,24],
+  iconAnchor:[12,12],
+  html:`
+   <div class="alarm-icon ${a.type}">
+     ⚡
+     <div class="label-container site-label">${a.code}</div>
+   </div>`
+});
+
+const tooltipFactory=a=>`
+<div class="tooltip-site">
+<table>
+  <tr><td class='k'>Alarm</td><td>${a.alarm}</td></tr>
+  <tr><td class='k'>Occurrence</td><td>${a.occ.replace("T"," ")}</td></tr>
+  <tr><td class='k'>Runtime</td>
+      <td><span class="js-runtime" data-occ2="${a.occ}"></span></td></tr>
+  <tr><td class='k'>Site</td><td>${a.site}</td></tr>
+  <tr><td class='k'>District</td><td>${a.district}</td></tr>
+  <tr><td class='k'>Province</td><td>${a.province}</td></tr>
+</table>
+</div>`;
+
+/* ===================== Render ===================== */
+alarms.forEach(a=>{
+  L.marker([a.lat,a.lng],{icon:iconFactory(a)})
+    .bindTooltip(tooltipFactory(a),{interactive:true})
+    .addTo(map);
+});
+
+updateRuntimes();
+</script>
+</body>
+</html>
